@@ -4,51 +4,44 @@ import java.awt.event.ActionListener;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
-import java.util.ArrayList;
-import java.util.Formatter;
-
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 
 import javax.sound.sampled.AudioFileFormat.Type;
-import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
-
 import jouvieje.bass.Bass;
 import jouvieje.bass.callbacks.SYNCPROC;
 import jouvieje.bass.defines.BASS_ATTRIB;
 import jouvieje.bass.defines.BASS_DATA;
 import jouvieje.bass.defines.BASS_MIDI;
 import jouvieje.bass.defines.BASS_POS;
-import jouvieje.bass.defines.BASS_SAMPLE;
 import jouvieje.bass.defines.BASS_SYNC_MIDI;
 import jouvieje.bass.defines.MIDI_EVENT;
 import jouvieje.bass.structures.BASS_MIDI_EVENT;
 import jouvieje.bass.structures.BASS_MIDI_MARK;
-import jouvieje.bass.structures.HFX;
 import jouvieje.bass.structures.HSTREAM;
 import jouvieje.bass.structures.HSYNC;
 import jouvieje.bass.utils.BufferUtils;
 import jouvieje.bass.utils.Pointer;
-import miditest.MainWindow;
 
 public class MIDIStream {
+  public static final int VOICES_MIN = 1;
+  public static final int VOICES_DEFAULT = 100;
+  public static final int VOICES_MAX = 100000;
+
   private File midiFile;
-  private int flags = BASS_SAMPLE.BASS_SAMPLE_FLOAT | BASS_MIDI.BASS_MIDI_DECAYEND;// | BASS_MIDI.BASS_MIDI_DECAYSEEK;
+  private int flags = /*BASS_SAMPLE.BASS_SAMPLE_FLOAT |*/ BASS_MIDI.BASS_MIDI_DECAYEND;
   private int freq = 44100;
   private HSTREAM handle;
   private SoundFont soundFont;
   private boolean loaded = false;
   private boolean playing = false;
   private ActionListener acl;
-  private String command;
-  // Stats
-  private int curNotes, totalNotes;
+  // Statistics
+  private int totalNotes;
 
   public MIDIStream(File file) {
     this(file, true, null, null);
@@ -56,7 +49,6 @@ public class MIDIStream {
 
   public MIDIStream(File file, boolean autoLoad, ActionListener acl, String actionCommnand) {
     this.acl = acl;
-    this.command = actionCommnand;
     setFile(file, autoLoad);
   }
 
@@ -87,7 +79,8 @@ public class MIDIStream {
       }
       BassErrors.printError();
       totalNotes = Bass.BASS_MIDI_StreamGetEvents(handle, -1, MIDI_EVENT.MIDI_EVENT_NOTE, null) / 2;
-
+      System.out.println("Notes: " + totalNotes);
+      System.out.println("Ticks: " + Bass.BASS_ChannelGetLength(handle.asInt(), BASS_POS.BASS_POS_MIDI_TICK));
       if (acl != null) {
         setNoteCounter();
       }
@@ -118,16 +111,7 @@ public class MIDIStream {
     Bass.BASS_ChannelStop(handle.asInt());
     System.out.println("stop");
     Bass.BASS_ChannelSetPosition(handle.asInt(), 0, 0);
-    curNotes = 0;
     playing = false;
-  }
-
-  public void export(String path) {
-    export(new File(path), null);
-  }
-
-  public void export(File dst) {
-    export(dst, null);
   }
 
   public void export(File dst, ExportStateReceiver receiver) {
@@ -193,15 +177,6 @@ public class MIDIStream {
 
   }
 
-  public static byte[] byteBufferToArray(ByteBuffer buf) {
-    byte[] res = new byte[buf.capacity()];
-    buf.rewind();
-    for (int i = 0; i < res.length; i++) {
-      res[i] = buf.get();
-    }
-    return res;
-  }
-
   public HSTREAM getHandle() {
     ensureLoaded();
     return handle;
@@ -211,7 +186,7 @@ public class MIDIStream {
     ensureLoaded();
     IntBuffer buffer = BufferUtils.newIntBuffer(256);
     if (!Bass.BASS_MIDI_StreamGetMark(handle, NEW_BASS_MIDI_MARK.BASS_MIDI_MARK_TRACK, 0, buffer)) {
-      return "[NO TITLE]";
+      return "";
     } else {
       BassErrors.printError();
       BASS_MIDI_MARK mark = BASS_MIDI_MARK.asBASS_MIDI_MARK(BufferUtils.asPointer(buffer));
@@ -219,8 +194,18 @@ public class MIDIStream {
     }
   }
 
+  public String getFileName() {
+    return midiFile.getName();
+  }
+
   public int noteCount() {
     return totalNotes;
+  }
+
+  public BASS_MIDI_EVENT getNote() {
+    BASS_MIDI_EVENT event = BASS_MIDI_EVENT.allocate();
+    Bass.BASS_MIDI_StreamGetEvents(handle, -1, MIDI_EVENT.MIDI_EVENT_NOTE, event);
+    return event;
   }
 
   public int currentLevel() {
@@ -235,8 +220,6 @@ public class MIDIStream {
     ensureLoaded();
     int pos = (int) Bass.BASS_ChannelGetPosition(handle.asInt(), BASS_POS.BASS_POS_MIDI_TICK);
     BassErrors.printError();
-    // System.out.println((Bass.BASS_ChannelGetPosition(handle.asInt(),
-    // BASS_POS.BASS_POS_BYTE) / 1000) + " k");
     return pos;
   }
 
@@ -292,8 +275,7 @@ public class MIDIStream {
       @Override
       public void SYNCPROC(HSYNC handle, int channel, int data, Pointer user) {
         int vel = data & 0x0000ffff >> 8; // Vel
-        if (vel != 0)
-          curNotes++;
+        if (vel != 0) {}
         System.out.println(vel);
         // acl.actionPerformed(new ActionEvent(this, 0, command));
       }

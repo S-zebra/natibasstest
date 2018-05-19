@@ -12,20 +12,21 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.StringTokenizer;
-
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JSeparator;
 import javax.swing.JSlider;
 import javax.swing.JToggleButton;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.filechooser.FileFilter;
 
 import jouvieje.bass.Bass;
@@ -34,21 +35,18 @@ import jouvieje.bass.defines.BASS_CONFIG;
 import util.ExportWindow;
 import util.MIDIStream;
 import util.SoundFont;
-import java.awt.Component;
-import java.awt.BorderLayout;
-import javax.swing.SwingConstants;
 import java.awt.FlowLayout;
-import java.awt.GridLayout;
 import java.awt.GridBagLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
+import javax.swing.JSpinner;
 
-public class MainWindow extends JPanel implements ActionListener, MouseMotionListener, MouseListener {
+public class MainWindow extends JPanel
+    implements ActionListener, MouseMotionListener, MouseListener, ChangeListener {
   private static final long serialVersionUID = -8452899082669383649L;
   // GUI Parts
-  private JPanel upperPanel, songInfoPanel, sfInfoPanel, buttonsPanel, controlPanel;
-  private JPanel songNamePanel;
-  private JLabel headerSongName, headerSFName, headerSongPosition, headerEffects;
+  private JPanel upperPanel, infoPanel, buttonsPanel;
+  private JLabel headerSongName, headerSFName, headerSongPosition;
   private JSlider songPosSlider;
   private JLabel textSongName, textSFName, textSFLoadedSam, textSFTotalSam;
 
@@ -56,14 +54,19 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
   private JToggleButton playPauseButton;
   private JButton exportButton, stopButton;
   private Timer timer;
+
+  private JFrame frame;
+  private JPanel lowerPanel;
+  private JPanel polyphonyPanel;
+  private JLabel polyphonyHeaderLabel;
+  private JSlider polyphonySlider;
+  private JSpinner polyphonySpinner;
+
   // MIDI
   private MIDIStream myStream;
   private SoundFont soundFont;
-  private boolean pendingSoundFont;
-  private JFrame frame;
 
   public MainWindow() {
-    this.setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 
     Font headerFont = new Font(".SF NS Text", Font.BOLD, 13);
     Font normalFont = headerFont.deriveFont(Font.PLAIN);
@@ -71,24 +74,19 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
     // Dimension fullWidth = new Dimension(500, 0);
 
     upperPanel = new JPanel();
-    upperPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
-
-    // 曲名
-    songInfoPanel = new JPanel();
-    songInfoPanel.setLayout(new BoxLayout(songInfoPanel, BoxLayout.X_AXIS));
-    upperPanel.add(songInfoPanel);
+    upperPanel.setLayout(new BoxLayout(upperPanel, BoxLayout.Y_AXIS));
 
     // サウンドフォント
-    sfInfoPanel = new JPanel();
+    infoPanel = new JPanel();
 
     textSFLoadedSam = new JLabel("0");
     textSFTotalSam = new JLabel("0");
-    GridBagLayout gbl_sfInfoPanel = new GridBagLayout();
-    gbl_sfInfoPanel.columnWidths = new int[] { 90, 210, 135 };
-    gbl_sfInfoPanel.rowHeights = new int[] { 20, 20, 0 };
-    gbl_sfInfoPanel.columnWeights = new double[] { 0.0, 0.0, 0.0 };
-    gbl_sfInfoPanel.rowWeights = new double[] { 0.0, 0.0, 0.0 };
-    sfInfoPanel.setLayout(gbl_sfInfoPanel);
+    GridBagLayout gbl_infoPanel = new GridBagLayout();
+    gbl_infoPanel.columnWidths = new int[] { 90, 210, 135 };
+    gbl_infoPanel.rowHeights = new int[] { 20, 20, 0 };
+    gbl_infoPanel.columnWeights = new double[] { 0.0, 0.0, 0.0 };
+    gbl_infoPanel.rowWeights = new double[] { 0.0, 0.0, 0.0 };
+    infoPanel.setLayout(gbl_infoPanel);
 
     sfReplaceButton = new JButton("Replace...");
     sfReplaceButton.setFont(normalFont);
@@ -101,16 +99,17 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
     gbc_headerSongName.insets = new Insets(0, 0, 5, 5);
     gbc_headerSongName.gridx = 0;
     gbc_headerSongName.gridy = 0;
-    sfInfoPanel.add(headerSongName, gbc_headerSongName);
+    infoPanel.add(headerSongName, gbc_headerSongName);
     headerSongName.setFont(headerFont);
 
     textSongName = new JLabel("Not specified");
+    textSongName.setPreferredSize(new Dimension(210, 20));
     GridBagConstraints gbc_textSongName = new GridBagConstraints();
     gbc_textSongName.fill = GridBagConstraints.BOTH;
     gbc_textSongName.insets = new Insets(0, 0, 5, 5);
     gbc_textSongName.gridx = 1;
     gbc_textSongName.gridy = 0;
-    sfInfoPanel.add(textSongName, gbc_textSongName);
+    infoPanel.add(textSongName, gbc_textSongName);
     textSongName.setFont(normalFont);
 
     songReplaceButton = new JButton("Change...");
@@ -119,7 +118,7 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
     gbc_songReplaceButton.insets = new Insets(0, 0, 5, 5);
     gbc_songReplaceButton.gridx = 2;
     gbc_songReplaceButton.gridy = 0;
-    sfInfoPanel.add(songReplaceButton, gbc_songReplaceButton);
+    infoPanel.add(songReplaceButton, gbc_songReplaceButton);
     songReplaceButton.setFont(normalFont);
     songReplaceButton.setActionCommand(String.valueOf(ActionCommand.SONG_CHANGE));
     songReplaceButton.addActionListener(this);
@@ -131,24 +130,25 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
     gbc_headerSFName.insets = new Insets(0, 0, 5, 5);
     gbc_headerSFName.gridx = 0;
     gbc_headerSFName.gridy = 1;
-    sfInfoPanel.add(headerSFName, gbc_headerSFName);
+    infoPanel.add(headerSFName, gbc_headerSFName);
 
     textSFName = new JLabel("Not specified");
+    textSFName.setPreferredSize(new Dimension(210, 20));
     textSFName.setFont(normalFont);
     GridBagConstraints gbc_textSFName = new GridBagConstraints();
     gbc_textSFName.fill = GridBagConstraints.BOTH;
     gbc_textSFName.insets = new Insets(0, 0, 5, 5);
     gbc_textSFName.gridx = 1;
     gbc_textSFName.gridy = 1;
-    sfInfoPanel.add(textSFName, gbc_textSFName);
+    infoPanel.add(textSFName, gbc_textSFName);
     GridBagConstraints gbc_sfReplaceButton = new GridBagConstraints();
     gbc_sfReplaceButton.insets = new Insets(0, 0, 5, 5);
     gbc_sfReplaceButton.fill = GridBagConstraints.BOTH;
     gbc_sfReplaceButton.gridx = 2;
     gbc_sfReplaceButton.gridy = 1;
-    sfInfoPanel.add(sfReplaceButton, gbc_sfReplaceButton);
+    infoPanel.add(sfReplaceButton, gbc_sfReplaceButton);
 
-    upperPanel.add(sfInfoPanel);
+    upperPanel.add(infoPanel);
 
     headerSongPosition = new JLabel("Position:");
     GridBagConstraints gbc_headerSongPosition = new GridBagConstraints();
@@ -156,7 +156,7 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
     gbc_headerSongPosition.insets = new Insets(0, 0, 5, 5);
     gbc_headerSongPosition.gridx = 0;
     gbc_headerSongPosition.gridy = 2;
-    sfInfoPanel.add(headerSongPosition, gbc_headerSongPosition);
+    infoPanel.add(headerSongPosition, gbc_headerSongPosition);
     headerSongPosition.setFont(headerFont);
 
     songPosSlider = new JSlider();
@@ -166,7 +166,7 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
     gbc_songPosSlider.insets = new Insets(0, 0, 5, 5);
     gbc_songPosSlider.gridx = 1;
     gbc_songPosSlider.gridy = 2;
-    sfInfoPanel.add(songPosSlider, gbc_songPosSlider);
+    infoPanel.add(songPosSlider, gbc_songPosSlider);
     songPosSlider.setValue(0);
     songPosSlider.addMouseMotionListener(this);
     songPosSlider.addMouseListener(this);
@@ -178,7 +178,7 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
     exportButton.setFont(normalFont);
     exportButton.setActionCommand(String.valueOf(ActionCommand.EXPORT));
     exportButton.addActionListener(this);
-    buttonsPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
+    buttonsPanel.setLayout(new BoxLayout(buttonsPanel, BoxLayout.X_AXIS));
     exportButton.setEnabled(false);
     buttonsPanel.add(exportButton);
 
@@ -193,6 +193,7 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
     stopButton.setFont(normalFont);
     stopButton.setActionCommand(String.valueOf(ActionCommand.STOP));
     stopButton.addActionListener(this);
+    setLayout(new FlowLayout(FlowLayout.LEFT, 5, 5));
     stopButton.setEnabled(false);
     buttonsPanel.add(stopButton);
 
@@ -200,6 +201,35 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
 
     add(upperPanel);
     timer = new Timer(100, this);
+
+    lowerPanel = new JPanel();
+    FlowLayout flowLayout = (FlowLayout) lowerPanel.getLayout();
+    flowLayout.setAlignment(FlowLayout.LEFT);
+    add(lowerPanel);
+
+    polyphonyPanel = new JPanel();
+    lowerPanel.add(polyphonyPanel);
+    polyphonyPanel.setLayout(new BoxLayout(polyphonyPanel, BoxLayout.X_AXIS));
+
+    polyphonyHeaderLabel = new JLabel("Polyphony: ");
+    polyphonyHeaderLabel.setFont(headerFont);
+    polyphonyPanel.add(polyphonyHeaderLabel);
+
+    polyphonySlider = new JSlider();
+    polyphonySlider.setValue(MIDIStream.VOICES_DEFAULT);
+    polyphonySlider.setMinimum(MIDIStream.VOICES_MIN);
+    polyphonySlider.setMaximum(5000);
+    polyphonySlider.addChangeListener(this);
+    polyphonySlider.setName(ActionCommand.POLY_SLIDER);
+    polyphonyPanel.add(polyphonySlider);
+
+    polyphonySpinner = new JSpinner();
+    polyphonySpinner.setFont(normalFont);
+    polyphonySpinner.setModel(
+        new SpinnerNumberModel(MIDIStream.VOICES_DEFAULT, MIDIStream.VOICES_MIN, MIDIStream.VOICES_MAX, 1));
+    polyphonySpinner.setName(ActionCommand.POLY_SPINNER);
+    polyphonySpinner.addChangeListener(this);
+    polyphonyPanel.add(polyphonySpinner);
     timer.setActionCommand(String.valueOf(ActionCommand.TIMER));
     timer.setRepeats(true);
   }
@@ -219,7 +249,7 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
         loadSFFile();
       break;
       case ActionCommand.EXPORT:
-        File preDefinedFile = new File(System.getProperty("user.home") + "/" + myStream.getSongName() + ".wav");
+        File preDefinedFile = new File(System.getProperty("user.home") + "/" + myStream.getFileName() + ".wav");
         JFileChooser selectDialog = new JFileChooser();
         ExportWindow exportWindow = new ExportWindow(this.frame);
 
@@ -234,10 +264,12 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
             return f.getName().endsWith(".wav");
           }
         });
+
         selectDialog.setSelectedFile(preDefinedFile);
         if (selectDialog.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
           File selectedFile = selectDialog.getSelectedFile();
-          if (selectedFile.exists() && JOptionPane.showConfirmDialog(this, selectedFile.getName() + " already exists. Do you want to overwrite it?", "Overwrite confirmation",
+          if (selectedFile.exists() && JOptionPane.showConfirmDialog(this,
+              selectedFile.getName() + " already exists. Do you want to overwrite it?", "Overwrite confirmation",
               JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.NO_OPTION) {
             return;
           }
@@ -295,7 +327,6 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
             myStream.setFile(midiFile, true);
           } else {
             myStream = new MIDIStream(midiFile);
-            myStream.setVoicesLimit(1200);
             if (soundFont != null) {
               myStream.setSoundFont(soundFont);
             }
@@ -417,6 +448,24 @@ public class MainWindow extends JPanel implements ActionListener, MouseMotionLis
 
   }
 
+  @Override
+  public void stateChanged(ChangeEvent e) {
+    JComponent source = ((JComponent) e.getSource());
+    String sourceName = source.getName();
+    if (sourceName != null && myStream != null) {
+
+      if (sourceName.equals(ActionCommand.POLY_SLIDER)) {
+        int value = polyphonySlider.getValue();
+        myStream.setVoicesLimit(value);
+        polyphonySpinner.setValue(value);
+      } else if (sourceName.equals(ActionCommand.POLY_SPINNER)) {
+        int value = (int) polyphonySpinner.getValue();
+        myStream.setVoicesLimit(value);
+        polyphonySlider.setValue(value);
+      }
+    }
+  }
+
 }
 
 class Loader {
@@ -433,7 +482,8 @@ class Loader {
           System.out.println("Unknown switch: " + switchName);
         }
       } else {
-        // -で始まらないスイッチ名 / ファイル名(未実装)
+        // -で始まらないスイッチ名
+        //TODO: ファイル名
         System.out.println("Unknown argument: " + switchName);
       }
     }
@@ -445,10 +495,10 @@ class Loader {
     System.setProperty("apple.laf.useScreenMenuBar", "true");
     System.setProperty("apple.awt.application.name", appName);
     HashMap<String, String> argsMap = analyzeArgs(args);
-
+    System.setProperty("java.library.path", System.getProperty("java.library.path") + ":.");
     if (argsMap.containsKey("lib")) {
-      System.setProperty("java.library.path", System.getProperty("java.library.path") + ":" + args[0]);
-      System.out.println(args[0] + "added to java.library.path.");
+      System.setProperty("java.library.path", System.getProperty("java.library.path") + ":" + args[1]);
+      System.out.println(args[1] + "added to java.library.path.");
     }
     BassInit.DEBUG = false;
     BassInit.loadLibraries();
@@ -461,6 +511,7 @@ class Loader {
     mainWindow.getContentPane().add(mainPanel);
     mainWindow.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     mainWindow.setSize(new Dimension(500, 300));
+    mainWindow.setResizable(false);
     mainWindow.setVisible(true);
 
     if (argsMap.containsKey("sf")) {
